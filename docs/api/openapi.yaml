@@ -1,0 +1,241 @@
+openapi: 3.0.3
+
+info:
+  title: AI Assistant API
+  description: |
+    API ИИ-помощника интернет-магазина. Сервис принимает вопросы посетителей,
+    возвращает ответы чат-бота и позволяет передать обращение оператору поддержки.
+  version: 1.0.0
+
+servers:
+  - url: https://example.com/api/v1
+
+tags:
+  - name: messages
+    description: Обработка сообщений чат-ботом
+  - name: operator-requests
+    description: Передача обращений оператору поддержки
+
+paths:
+  /messages:
+    post:
+      tags:
+        - messages
+      summary: Отправить сообщение чат-боту.
+      description: |
+        Отправляет текст вопроса пользователя чат боту и возвращает ответ ИИ-помощника.
+        Если вопрос вне компетенций чат-бота, в ответе возвращается статус
+        "operator_required".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Сообщение обработано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResult"
+        "400":
+          description: Некорректный запрос.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "503":
+          description: Модель временно недоступна.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Ответ не получен за 10 секунд, обратитесь к оператору.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /messages/{messageId}:
+    get:
+      tags:
+        - messages
+      summary: Получить результат обработки сообщения.
+      description: Возвращает сохранённый результат обработки сообщения по его id.
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          description: Идентификатор результата обработки сообщения
+          schema:
+            type: string
+          example: msg-98432
+      responses:
+        "200":
+          description: Результат найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResult"
+        "404":
+          description: Результат не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Внутренняя ошибка сервиса
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /operator-requests:
+    post:
+      tags:
+        - operator-requests
+      summary: Передать обращение оператору
+      description: Создаёт обращение оператору поддержки после согласия пользователя.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperatorRequestCreate"
+      responses:
+        "200":
+          description: Обращение создано и поставлено в очередь
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorRequest"
+        "400":
+          description: Некорректный запрос
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Сообщение не найдено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    ChatRequest:
+      type: object
+      description: Запрос на обработку сообщения чат-ботом.
+      required:
+        - text
+        - sessionId
+        - userId
+      properties:
+        text:
+          type: string
+          description: Текст вопроса.
+          example: Как вернуть товар, купленный неделю назад?
+        sessionId:
+          type: string
+          description: Id диалога.
+          example: sess-7f3a91
+        userId:
+          type: string
+          description: Идентификатор пользователя.
+          example: usr-42
+
+    ChatResult:
+      type: object
+      description: Результат обработки сообщения.
+      required:
+        - resultId
+        - status
+        - answer
+        - modelVersion
+        - requestTime
+      properties:
+        resultId:
+          type: string
+          description: Идентификатор результата обработки.
+          example: msg-98432
+        status:
+          type: string
+          description: |
+            Статус обработки: "answered" -- чат-бот ответил.
+            "operator_required" -- вопрос вне компетенций бота, нужно передать оператору.
+          example: answered
+        answer:
+          type: string
+          description: Ответ ИИ-помощника. Отсутствует, если требуется оператор.
+          example: Товар можно вернуть в течение 14 дней после покупки.
+        modelVersion:
+          type: string
+          description: Версия ИИ-модели, сформировавшей ответ.
+          example: qwen-3.8-27b-1.3.0
+        requestTime:
+          type: string
+          format: date-time
+          description: Дата и время обработки сообщения.
+          example: "2026-11-01T12:44:51Z"
+
+    OperatorRequestCreate:
+      type: object
+      description: Запрос на передачу обращения оператору поддержки.
+      required:
+        - messageId
+      properties:
+        messageId:
+          type: string
+          description: Идентификатор сообщения, по которому создаётся обращение.
+          example: msg-98432
+
+    OperatorRequest:
+      type: object
+      description: Созданное обращение оператору поддержки.
+      required:
+        - requestId
+        - messageId
+        - status
+        - createdAt
+      properties:
+        requestId:
+          type: string
+          description: Идентификатор обращения.
+          example: op-5521
+        messageId:
+          type: string
+          description: Идентификатор сообщения, по которому создано обращение.
+          example: msg-98432
+        status:
+          type: string
+          description: Текущий статус обращения.
+          example: queued
+        createdAt:
+          type: string
+          format: date-time
+          description: Дата и время создания обращения.
+          example: "2026-11-01T12:44:51Z"
+
+    ErrorResponse:
+      type: object
+      description: Ответ с описанием ошибки.
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Машиночитаемый код ошибки.
+          example: INVALID_TEXT
+        message:
+          type: string
+          description: Человекочитаемое описание ошибки.
+          example: Text must not be empty
+        requestId:
+          type: string
+          description: Идентификатор запроса для диагностики.
+          example: req-10293

@@ -154,7 +154,6 @@ components:
       required:
         - resultId
         - status
-        - answer
         - modelVersion
         - requestTime
       properties:
